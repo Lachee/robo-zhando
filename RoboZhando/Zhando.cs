@@ -120,7 +120,7 @@ namespace RoboZhando
             }
 
             // If no one else is in the channel
-            if (e.Channel == null || e.Channel.Users.Any())
+            if (e.Channel == null || e.Channel.Users.Count() == 0)
             {
                 listener.Disconnect();
                 return Task.CompletedTask;
