@@ -9,6 +9,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -24,7 +25,8 @@ namespace RoboZhando
         public IRedisClient Redis { get; set; }
         public Logging.Logger Logger { get; }
 
-        private SpeechSynthesizer Synth { get; }
+        private SpeechSynthesizer synthesizer;
+        private TTTSTagger tagger;
 
         /// <summary>Includes the Author Says</summary>
         public string AnouncerVoice { get; set; } = DEFAULT_VOICE;
@@ -39,7 +41,8 @@ namespace RoboZhando
             var config = SpeechConfig.FromSubscription(azureKey, azureRegion);
             config.SetSpeechSynthesisOutputFormat(AudioFormat);
 
-            Synth = new SpeechSynthesizer(config, null);
+            synthesizer = new SpeechSynthesizer(config, null);
+            tagger = new TTTSTagger();
             Logger = logger ?? new Logging.Logger("SYNTH");
         }
 
@@ -47,7 +50,7 @@ namespace RoboZhando
         public async Task<string> GetVoiceNameAsync(string voiceName)
         {
             voiceName = voiceName.Trim();
-            var voices = await Synth.GetVoicesAsync();
+            var voices = await synthesizer.GetVoicesAsync();
             return voices.Voices.Where(voice =>
                 voice.Name.Equals(voiceName, StringComparison.InvariantCultureIgnoreCase) ||
                 voice.ShortName.Equals(voiceName, StringComparison.InvariantCultureIgnoreCase)
@@ -66,12 +69,35 @@ namespace RoboZhando
             return DEFAULT_VOICE;
         }
 
+        /// <summary>Creates the clean content for the given message</summary>
+        protected Task<string> CreateCleanMessage(DiscordMessage message)
+        {
+            string text = message.Content;
+
+            // Do tags
+            text = tagger.Tag(text);
+
+            // Remove links
+            text = Regex.Replace(text, @"(http[s]?:\/\/(www\.)?|ftp:\/\/(www\.)?|www\.){1}([0-9A-Za-z-\.@:%_\+~#=]+)+((\.[a-zA-Z]{2,3})+)(\/([^\s])*)?(\?(.)*)?", "");
+
+            // Remove code blocks
+            text = Regex.Replace(text, @"`.*`", "");
+
+            // Replace the missing http
+            text = text.Replace("\"://", "\"https://");
+
+            return Task.FromResult(text.Trim());
+        }
+
         /// <summary>Creates a speakable message from the given discord message</summary>
         protected async Task<string> CreateSSMLMessage(DiscordMessage message)
         {
             // Generate the message
+            string text = await CreateCleanMessage(message);
+            if (string.IsNullOrWhiteSpace(text)) return null;
+
             string voice = await GetPreferedVoice(message.Author);
-            string speak = SSML_SPEAK_TEMPLATE.Replace("{voice}", voice).Replace("{message}", message.Content);
+            string speak = SSML_SPEAK_TEMPLATE.Replace("{voice}", voice).Replace("{message}", text);
 
             // Add the "Author Says"
             if (!string.IsNullOrEmpty(AnouncerVoice))
@@ -146,11 +172,15 @@ namespace RoboZhando
         /// <summary>Speaks the text directly to the speaker.</summary>
         protected async Task<SpeechSynthesisResult> SythesizeAsync(string text)
         {
+            //Throw if the text is empty
+            if (string.IsNullOrEmpty(text))
+                throw new ArgumentException("text cannot be empty");
+
             SpeechSynthesisResult result;
             if (text.StartsWith("<speak"))
-                 result = await Synth.SpeakSsmlAsync(text);
+                 result = await synthesizer.SpeakSsmlAsync(text);
             else
-                result = await Synth.SpeakTextAsync(text);
+                result = await synthesizer.SpeakTextAsync(text);
 
             if (result.Reason == ResultReason.SynthesizingAudioCompleted)
             {
@@ -188,7 +218,7 @@ namespace RoboZhando
 
         public void Dispose()
         {
-            Synth?.Dispose();
+            synthesizer?.Dispose();
         }
     }
 }

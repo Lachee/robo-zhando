@@ -43,7 +43,15 @@ namespace RoboZhando
         {
             await foreach(var message in _queue.Reader.ReadAllAsync(cancellationToken))
             {
-                await Synthesizer.SpeakAsync(message, VoiceConnection, cancellationToken);
+                try
+                {
+                    // Speak the message
+                    await Synthesizer.SpeakAsync(message, VoiceConnection, cancellationToken);
+                }
+                catch
+                {
+                    // We failed to speak that message, so lets just give up
+                }
             }
         }
 
