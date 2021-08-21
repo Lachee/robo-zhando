@@ -89,6 +89,7 @@ namespace RoboZhando
             // Listen to messages
             Logger.Log("Initializing");
             Discord.MessageCreated += OnMessageCreatedAsync;
+            Discord.VoiceStateUpdated += OnVoiceStateUpdated;
 
             await Discord.ConnectAsync(activity: new DiscordActivity("Zhando", ActivityType.ListeningTo), status: UserStatus.Online);
         }
@@ -98,6 +99,33 @@ namespace RoboZhando
             // Listen to messages
             Logger.Log("Denitializing");
             Discord.MessageCreated -= OnMessageCreatedAsync;
+            Discord.VoiceStateUpdated -= OnVoiceStateUpdated;
+            return Task.CompletedTask;
+        }
+
+        private Task OnVoiceStateUpdated(DiscordClient sender, DSharpPlus.EventArgs.VoiceStateUpdateEventArgs e)
+        {           
+            // Skip if we dont have a connection
+            Listener listener;
+            if (!listeners.TryGetValue(e.Guild, out listener))
+                return Task.CompletedTask;
+
+            // If we disconnected, then clear and dispose
+            if (e.User != Discord.CurrentUser && e.After.Channel == null)
+            {
+                listener.Disconnect();
+                listener.Dispose();
+                listeners.Remove(e.Guild);
+                return Task.CompletedTask;
+            }
+
+            // If no one else is in the channel
+            if (e.Channel == null || e.Channel.Users.Any())
+            {
+                listener.Disconnect();
+                return Task.CompletedTask;
+            }
+
             return Task.CompletedTask;
         }
 

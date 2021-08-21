@@ -31,6 +31,7 @@ namespace RoboZhando
 
             TextChannel = textChannel;
             Synthesizer = synth;
+
         }
 
         /// <summary>Connects to the voice channel</summary>
@@ -40,7 +41,7 @@ namespace RoboZhando
                 throw new ArgumentException("voiceChannel", "has to be of type Voice");
 
             VoiceConnection = await voiceChannel.ConnectAsync();
-            
+
             if (queue != null) queue.Dispose();
             queue = new TTSQueue(Synthesizer, VoiceConnection);
 
