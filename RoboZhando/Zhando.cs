@@ -110,20 +110,25 @@ namespace RoboZhando
             if (!listeners.TryGetValue(e.Guild, out listener))
                 return Task.CompletedTask;
 
-            // If we disconnected, then clear and dispose
-            if (e.User != Discord.CurrentUser && e.After.Channel == null)
+            if (e.User == Discord.CurrentUser)
             {
-                listener.Disconnect();
-                listener.Dispose();
-                listeners.Remove(e.Guild);
-                return Task.CompletedTask;
+                // If we disconnected, then clear and dispose
+                if (e.After.Channel == null)
+                {
+                    listener.Disconnect();
+                    listener.Dispose();
+                    listeners.Remove(e.Guild);
+                    return Task.CompletedTask;
+                }
             }
-
-            // If no one else is in the channel
-            if (e.Channel == null || e.Channel.Users.Count() == 0)
+            else
             {
-                listener.Disconnect();
-                return Task.CompletedTask;
+                // If no one else is in the channel
+                if (e.Before?.Channel == listener.VoiceConnection.TargetChannel && e.Before.Channel.Users.Count() == 1)
+                {
+                    listener.Disconnect();
+                    return Task.CompletedTask;
+                }
             }
 
             return Task.CompletedTask;
